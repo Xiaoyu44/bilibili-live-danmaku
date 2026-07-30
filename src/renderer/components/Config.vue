@@ -820,6 +820,47 @@
           >版本</span
         >
         <span class="about-val">v{{ version }}</span>
+        <button
+          class="btn btn-default btn-sm"
+          @click="checkForUpdate">
+          检查更新
+        </button>
+        <template v-if="updateStatus === 'checking'">
+          <span class="update-status-text">
+            <Icon
+              type="ios-loading"
+              size="14"
+              class="spin-icon" />
+            正在检查...
+          </span>
+        </template>
+        <template v-else-if="updateStatus === 'available'">
+          <span class="update-status-text available">发现新版本 v{{ updateVersion }}</span>
+          <button
+            class="btn btn-primary btn-sm"
+            @click="downloadUpdate">
+            下载更新
+          </button>
+        </template>
+        <template v-else-if="updateStatus === 'downloading'">
+          <span class="update-status-text downloading"
+            >下载中 {{ Math.round(downloadPercent) }}%</span
+          >
+          <div class="update-progress-bar">
+            <div
+              class="update-progress-fill"
+              :style="{ width: downloadPercent + '%' }"></div>
+          </div>
+        </template>
+        <template v-else-if="updateStatus === 'downloaded'">
+          <span class="update-status-text available">下载完成，即将重启...</span>
+        </template>
+        <template v-else-if="updateStatus === 'no-update'">
+          <span class="update-status-text">已是最新版本</span>
+        </template>
+        <template v-else-if="updateStatus === 'error'">
+          <span class="update-status-text error">{{ updateError || '检查失败' }}</span>
+        </template>
       </div>
     </div>
     <!-- ═══ 扫码登录弹窗 ═══ -->
@@ -868,7 +909,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { get as _get, set as _set } from 'lodash'
 import config from '../service/config'
 import {
@@ -881,7 +922,15 @@ import {
   getMedalList,
   addLike,
 } from '../service/api'
-import { IPC_GET_VERSION, QUALITY_MAP, IPC_CHOOSE_DIRECTORY } from '../../service/const'
+import {
+  IPC_GET_VERSION,
+  QUALITY_MAP,
+  IPC_CHOOSE_DIRECTORY,
+  IPC_CHECK_FOR_UPDATE,
+  IPC_DOWNLOAD_UPDATE,
+  IPC_DOWNLOAD_PROGRESS,
+  IPC_UPDATE_DOWNLOADED,
+} from '../../service/const'
 import QRCode from 'qrcode'
 import draggable from 'vuedraggable'
 import { Message as $Message } from 'view-ui-plus'
@@ -913,12 +962,61 @@ async function loadSystemFonts() {
   }
 }
 
+// ── 自动更新 ──
+const updateStatus = ref<
+  'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'no-update' | 'error'
+>('idle')
+const updateVersion = ref('')
+const downloadPercent = ref(0)
+const updateError = ref('')
+
+function checkForUpdate() {
+  updateStatus.value = 'checking'
+  updateError.value = ''
+  window.ipcRenderer.invoke(IPC_CHECK_FOR_UPDATE).then((result: any) => {
+    if (result.status === 'available') {
+      updateStatus.value = 'available'
+      updateVersion.value = result.version || ''
+    } else if (result.status === 'no-update') {
+      updateStatus.value = 'no-update'
+    } else {
+      updateStatus.value = 'error'
+      updateError.value = result.message || '检查失败'
+    }
+  })
+}
+
+function downloadUpdate() {
+  updateStatus.value = 'downloading'
+  downloadPercent.value = 0
+  window.ipcRenderer.send(IPC_DOWNLOAD_UPDATE)
+}
+
+const onDownloadProgress = (data: any) => {
+  updateStatus.value = 'downloading'
+  downloadPercent.value = data.percent || 0
+}
+
+const onUpdateDownloaded = (data: any) => {
+  updateStatus.value = 'downloaded'
+  updateVersion.value = data?.version || ''
+}
+
 onMounted(async () => {
   version.value = (await window.ipcRenderer.invoke(IPC_GET_VERSION)) as string
   const baseUrl = await window.getBaseUrl()
   obsDmUrl.value = `${baseUrl}/dm?clientId=${clientId.value}&roomId=*`
   obsRawUrl.value = `${baseUrl}/dm-raw-style?clientId=${clientId.value}&roomId=*`
   loadSystemFonts()
+
+  // 监听下载进度 & 下载完成事件
+  window.ipcRenderer.on(IPC_DOWNLOAD_PROGRESS, onDownloadProgress)
+  window.ipcRenderer.on(IPC_UPDATE_DOWNLOADED, onUpdateDownloaded)
+})
+
+onBeforeUnmount(() => {
+  window.ipcRenderer.removeAllListeners(IPC_DOWNLOAD_PROGRESS)
+  window.ipcRenderer.removeAllListeners(IPC_UPDATE_DOWNLOADED)
 })
 
 const qualityOptions = Object.entries(QUALITY_MAP)
@@ -1430,7 +1528,8 @@ async function lightMedal() {
 }
 
 .about-val {
-  font-size: 11px;
+  font-size: 12px;
+  font-family: monospace;
   color: #999;
 }
 
@@ -1462,6 +1561,40 @@ async function lightMedal() {
   color: #2d8cf0;
   background: #e8f0fe;
   border-color: #2d8cf0;
+}
+
+/* ── 更新状态 ── */
+.update-status-text {
+  font-size: 12px;
+  color: #999;
+}
+
+.update-status-text.available {
+  color: #19be6b;
+  font-weight: 500;
+}
+
+.update-status-text.downloading {
+  color: #2d8cf0;
+}
+
+.update-status-text.error {
+  color: #ed4014;
+}
+
+.update-progress-bar {
+  width: 120px;
+  height: 6px;
+  background: #e8eaec;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  background: #2d8cf0;
+  border-radius: 3px;
+  transition: width 0.3s ease;
 }
 
 .label {

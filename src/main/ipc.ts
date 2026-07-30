@@ -91,6 +91,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
         frame: frame ?? true,
         transparent: transparent ?? false,
         hasShadow: hasShadow ?? true,
+        skipTaskbar: true,
         x,
         y,
         // roundedCorners: false, // mac 自带圆角

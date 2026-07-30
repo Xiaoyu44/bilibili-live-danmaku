@@ -6,7 +6,15 @@ export const QUALITY_MAP = {
   流畅: 80,
 }
 
-export const COLORS = ['crimson', 'darkorange', 'gold', 'forestgreen', 'darkcyan', 'dodgerblue', 'violet']
+export const COLORS = [
+  'crimson',
+  'darkorange',
+  'gold',
+  'forestgreen',
+  'darkcyan',
+  'dodgerblue',
+  'violet',
+]
 
 // export const DEFAULT_FONTS = ['inherit', 'initial', 'unset']
 // export const DEFAULT_COMMON_FONT_FAMILIES = ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy']
@@ -16,6 +24,8 @@ export const IPC_UPDATE_AVAILABLE = 'IPC_UPDATE_AVAILABLE'
 export const IPC_DOWNLOAD_UPDATE = 'IPC_DOWNLOAD_UPDATE'
 export const IPC_DOWNLOAD_PROGRESS = 'IPC_DOWNLOAD_PROGRESS'
 export const IPC_UPDATE_DOWNLOADED = 'IPC_UPDATE_DOWNLOADED'
+export const IPC_UPDATE_ERROR = 'IPC_UPDATE_ERROR'
+export const IPC_UPDATE_NOT_AVAILABLE = 'IPC_UPDATE_NOT_AVAILABLE'
 export const IPC_GET_USER_PATH = 'IPC_GET_USER_PATH'
 export const IPC_GET_VERSION = 'IPC_GET_VERSION'
 export const IPC_GET_EXE_PATH = 'IPC_GET_EXE_PATH'

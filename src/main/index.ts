@@ -3,7 +3,6 @@ import {
   BrowserWindow,
   ipcMain,
   session,
-  IpcMainEvent,
   netLog,
   systemPreferences,
   Tray,
@@ -16,8 +15,8 @@ import { autoUpdater } from 'electron-updater'
 import {
   IPC_CHECK_FOR_UPDATE,
   IPC_DOWNLOAD_UPDATE,
-  IPC_UPDATE_AVAILABLE,
   IPC_DOWNLOAD_PROGRESS,
+  IPC_UPDATE_DOWNLOADED,
 } from '../service/const'
 import { registerIpcHandlers } from './ipc'
 import globalVar from '../service/global'
@@ -178,50 +177,50 @@ app.on('ready', async () => {
   // 注册所有 IPC 处理器
   registerIpcHandlers(mainWindow!)
 
-  /**
-   * Auto Updater
-   *
-   * Uncomment the following code below and install `electron-updater` to
-   * support auto updating. Code Signing with a valid certificate is required.
-   * https://simulatedgreg.gitbooks.io/electron-vue/content/en/using-electron-builder.html#auto-updating
-   */
-  if (!import.meta.env.DEV) {
-    autoUpdater.autoDownload = false
-    autoUpdater.autoInstallOnAppQuit = false
+  // ═══ Auto Updater ═══
+  // 检查更新 — 直接用 checkForUpdates 返回值，不走事件
+  ipcMain.handle(IPC_CHECK_FOR_UPDATE, async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates()
+      const latestVersion = result?.updateInfo?.version
+      if (latestVersion && latestVersion !== app.getVersion()) {
+        return { status: 'available', version: latestVersion }
+      }
+      return { status: 'no-update' }
+    } catch (e: any) {
+      return { status: 'error', message: e?.message || '检查更新失败' }
+    }
+  })
 
-    ipcMain.on(IPC_CHECK_FOR_UPDATE, async (_event: IpcMainEvent) => {
-      autoUpdater.checkForUpdates()
+  ipcMain.on(IPC_DOWNLOAD_UPDATE, () => {
+    autoUpdater.downloadUpdate()
+  })
+
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+
+  autoUpdater.on('download-progress', progress => {
+    mainWindow!.webContents.send(IPC_DOWNLOAD_PROGRESS, {
+      progress: progress.percent,
+      bytesPerSecond: progress.bytesPerSecond,
+      percent: progress.percent,
+      total: progress.total,
     })
+  })
 
-    ipcMain.on(IPC_DOWNLOAD_UPDATE, () => {
-      autoUpdater.downloadUpdate()
+  autoUpdater.on('update-downloaded', info => {
+    mainWindow!.webContents.send(IPC_UPDATE_DOWNLOADED, {
+      version: info.version,
     })
-
-    autoUpdater.on('update-available', () => {
-      mainWindow!.webContents.send(IPC_UPDATE_AVAILABLE)
-    })
-
-    autoUpdater.on('download-progress', progress => {
-      mainWindow!.webContents.send(IPC_DOWNLOAD_PROGRESS, {
-        progress: progress.percent,
-        bytesPerSecond: progress.bytesPerSecond,
-        percent: progress.percent,
-        total: progress.total,
-      })
-    })
-
-    autoUpdater.on('update-downloaded', () => {
+    // 延迟 3 秒后重启安装，给用户看到提示的时间
+    setTimeout(() => {
       autoUpdater.quitAndInstall()
-    })
+    }, 3000)
+  })
 
-    autoUpdater.on('error', error => {
-      console.error(`AutoUpdate: ${error === null ? 'unknown' : (error.stack || error).toString()}`)
-    })
-
-    autoUpdater.on('update-not-available', () => {
-      console.log('AutoUpdate: update-not-available')
-    })
-  }
+  autoUpdater.on('error', error => {
+    console.error(`AutoUpdate: ${error === null ? 'unknown' : (error.stack || error).toString()}`)
+  })
 })
 
 app.on('window-all-closed', () => {
